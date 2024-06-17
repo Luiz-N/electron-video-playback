@@ -15,8 +15,9 @@ type Permission = Parameters<
  * In development mode you need allow open `VITE_DEV_SERVER_URL`.
  */
 const ALLOWED_ORIGINS_AND_PERMISSIONS = new Map<string, Set<Permission>>(
+  // TODO: find out better way to request media permissions from user
   import.meta.env.DEV && import.meta.env.VITE_DEV_SERVER_URL
-    ? [[new URL(import.meta.env.VITE_DEV_SERVER_URL).origin, new Set()]]
+    ? [[new URL(import.meta.env.VITE_DEV_SERVER_URL).origin, new Set(['media'])]]
     : [],
 );
 
