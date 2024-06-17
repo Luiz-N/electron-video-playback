@@ -1,8 +1,17 @@
-import {app} from 'electron';
+import {app, dialog, ipcMain, net, protocol} from 'electron';
 import './security-restrictions';
 import {restoreOrCreateWindow} from '/@/mainWindow.js';
 import {platform} from 'node:process';
 import updater from 'electron-updater';
+import {unlink, writeFile} from 'node:fs/promises';
+
+// TODO: Centralize type definitions to avoid duplication between here and renderedr & main
+type Video = {
+  path: string;
+  name: string;
+  size: number;
+  createdAt: Date;
+};
 
 /**
  * Prevent electron from running multiple instances.
@@ -33,11 +42,55 @@ app.on('window-all-closed', () => {
  */
 app.on('activate', restoreOrCreateWindow);
 
+// https://github.com/electron/electron/issues/23393#issuecomment-1937592773
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'media',
+    privileges: {
+      secure: true,
+      supportFetchAPI: true,
+      bypassCSP: true,
+      stream: true,
+    },
+  },
+]);
+
 /**
  * Create the application window when the background process is ready.
  */
 app
   .whenReady()
+  .then(() => {
+    protocol.handle('media', req => {
+      const pathToMedia = new URL(req.url).pathname;
+      return net.fetch(`file://${pathToMedia}`);
+    });
+
+    ipcMain.handle('save-video', async (_event, buffer) => {
+      const {filePath} = await dialog.showSaveDialog({
+        buttonLabel: 'Save video',
+        defaultPath: 'video.mp4',
+      });
+
+      const fileName = filePath.split('/').pop();
+
+      if (filePath) {
+        await writeFile(filePath, buffer);
+        return {
+          path: filePath,
+          name: fileName,
+          size: buffer.length,
+          createdAt: new Date(),
+        } as Video;
+      }
+      return null;
+    });
+
+    ipcMain.handle('delete-video', async (_event, filePath) => {
+      await unlink(filePath);
+      return true;
+    });
+  })
   .then(restoreOrCreateWindow)
   .catch(e => console.error('Failed create window:', e));
 
